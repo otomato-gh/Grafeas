@@ -16,52 +16,53 @@ package storage
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/grafeas/grafeas/samples/server/go-server/api"
+	"github.com/grafeas/grafeas/samples/server/go-server/api/server/name"
 	"github.com/grafeas/grafeas/server-go"
 	"github.com/grafeas/grafeas/server-go/errors"
 )
 
-// memStore is an in-memory storage solution for Grafeas
+// mgoStore is mongoDb based storage backend for grafeas
 type mgoStore struct {
-	session *mgo.Session
+	session     *mgo.Session
+	occurrences *mgo.Collection
+	notes       *mgo.Collection
 }
 
-// NewMemStore creates a memStore with all maps initialized.
-// func NewMemStore() server.Storager {
-// 	return &memStore{make(map[string]swagger.Occurrence), make(map[string]swagger.Note),
-// 		make(map[string]swagger.Operation)}
-// }
-
+// NewMgoStore initiates a mongodb session
 func NewMgoStore() server.Storager {
-	return &mgoStore{Dbinit()}
-
+	m := &mgoStore{Dbinit(), nil, nil}
+	m.occurrences = m.session.DB("grafeas").C("occurrences")
+	m.notes = m.session.DB("grafeas").C("notes")
+	return m
 }
 
 // CreateOccurrence adds the specified occurrence to the mem store
 func (m *mgoStore) CreateOccurrence(o *swagger.Occurrence) *errors.AppError {
-	oCol := m.session.DB("grafeas").C("occurrences")
-	err := oCol.Find(bson.M{"name": o.Name})
+	//m.occurrences := m.session.DB("grafeas").C("occurrences")
+	err := m.occurrences.Find(bson.M{"name": o.Name})
 	if err != nil {
 		return &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q already exists", o.Name),
 			StatusCode: http.StatusBadRequest}
 	}
-	oCol.Insert(o)
+	m.occurrences.Insert(o)
 	return nil
 }
 
 // DeleteOccurrence deletes the occurrence with the given pID and oID from the memStore
 func (m *mgoStore) DeleteOccurrence(pID, oID string) *errors.AppError {
-	// 	oName := name.OccurrenceName(pID, oID)
-	// 	if _, ok := m.occurrencesByID[oName]; !ok {
-	// 		return &errors.AppError{Err: fmt.Sprintf("Occurrence with oName %q does not Exist", oName),
-	// 			StatusCode: http.StatusBadRequest}
-	// 	}
+	oName := name.OccurrenceName(pID, oID)
+	//m.occurrences := m.session.DB("grafeas").C("occurrences")
+	err := m.occurrences.Remove(bson.M{"name": oName})
+	if err != nil {
+		return &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q not found", oName),
+			StatusCode: http.StatusBadRequest}
+	}
 	// 	delete(m.occurrencesByID, oName)
 	return nil
 }
@@ -81,13 +82,14 @@ func (m *mgoStore) UpdateOccurrence(pID, oID string, o *swagger.Occurrence) *err
 //
 // // GetOccurrence returns the occurrence with pID and oID
 func (m *mgoStore) GetOccurrence(pID, oID string) (*swagger.Occurrence, *errors.AppError) {
-	// 	oName := name.OccurrenceName(pID, oID)
-	// 	o, ok := m.occurrencesByID[oName]
+	oName := name.OccurrenceName(pID, oID)
+	//	m.occurrences := m.session.DB("grafeas").C("occurrences")
 	var o swagger.Occurrence
-	// 	if !ok {
-	// 		return nil, &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q does not Exist", oName),
-	// 			StatusCode: http.StatusBadRequest}
-	// 	}
+	err := m.occurrences.Find(bson.M{"name": oName}).One(&o)
+	if err != nil {
+		return nil, &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q not found", oName),
+			StatusCode: http.StatusBadRequest}
+	}
 	return &o, nil
 }
 
@@ -104,15 +106,17 @@ func (m *mgoStore) ListOccurrences(pID, filters string) []swagger.Occurrence {
 
 // CreateNote adds the specified note to the mem store
 func (m *mgoStore) CreateNote(n *swagger.Note) *errors.AppError {
-	nCol := m.session.DB("grafeas").C("notes")
-	log.Printf("got collection %q", nCol)
-	note := swagger.Note{}
-	err := nCol.Find(bson.M{"name": n.Name}).One(&note)
-	if err == nil {
+	//m.notes := m.session.DB("grafeas").C("notes")
+	count, err := m.notes.Find(bson.M{"name": n.Name}).Count()
+	if count > 0 {
 		return &errors.AppError{Err: fmt.Sprintf("Note with name %q already exists", n.Name),
 			StatusCode: http.StatusBadRequest}
 	}
-	nCol.Insert(n)
+	if err != nil {
+		return &errors.AppError{Err: fmt.Sprintf("error searching for note %q", n.Name),
+			StatusCode: http.StatusBadRequest}
+	}
+	m.notes.Insert(n)
 	return nil
 }
 
@@ -155,18 +159,21 @@ func (m *mgoStore) GetNote(pID, nID string) (*swagger.Note, *errors.AppError) {
 //
 // // GetNoteByOccurrence returns the note attached to occurrence with pID and oID
 func (m *mgoStore) GetNoteByOccurrence(pID, oID string) (*swagger.Note, *errors.AppError) {
+	oName := name.OccurrenceName(pID, oID)
+	//m.occurrences := m.session.DB("grafeas").C("occurrences")
+	var o swagger.Occurrence
+	err := m.occurrences.Find(bson.M{"name": oName}).One(&o)
+	if err != nil {
+		return nil, &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q does not Exist", oName),
+			StatusCode: http.StatusBadRequest}
+	}
+	//m.notes := m.session.DB("grafeas").C("notes")
 	var n swagger.Note
-	// 	oName := name.OccurrenceName(pID, oID)
-	// 	o, ok := m.occurrencesByID[oName]
-	// 	if !ok {
-	// 		return nil, &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q does not Exist", oName),
-	// 			StatusCode: http.StatusBadRequest}
-	// 	}
-	// 	n, ok := m.notesByID[o.NoteName]
-	// 	if !ok {
-	// 		return nil, &errors.AppError{Err: fmt.Sprintf("Note with name %q does not Exist", o.NoteName),
-	// 			StatusCode: http.StatusBadRequest}
-	// 	}
+	err = m.notes.Find(bson.M{"name": o.NoteName}).One(&n)
+	if err != nil {
+		return nil, &errors.AppError{Err: fmt.Sprintf("Note with name %q does not Exist", o.NoteName),
+			StatusCode: http.StatusBadRequest}
+	}
 	return &n, nil
 }
 

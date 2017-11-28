@@ -12,7 +12,6 @@ func Dbinit() *mgo.Session {
 	if err != nil {
 		panic(err)
 	}
-	//defer session.Close()
 	session.SetMode(mgo.Monotonic, true)
 	return session
 }
