@@ -152,11 +152,12 @@ func (m *mgoStore) UpdateNote(pID, nID string, n *swagger.Note) *errors.AppError
 func (m *mgoStore) GetNote(pID, nID string) (*swagger.Note, *errors.AppError) {
 	//	nName := name.NoteName(pID, nID)
 	var n swagger.Note
-	// 	n, ok := m.notesByID[nName]
-	// 	if !ok {
-	// 		return nil, &errors.AppError{Err: fmt.Sprintf("Note with name %q does not Exist", nName),
-	// 			StatusCode: http.StatusBadRequest}
-	// 	}
+	nName := name.NoteName(pID, nID)
+	err := m.notes.Find(bson.M{"name": nName}).One(&n)
+	if err != nil {
+		return nil, &errors.AppError{Err: fmt.Sprintf("Note with name %q not found", nName),
+			StatusCode: http.StatusBadRequest}
+	}
 	return &n, nil
 }
 
