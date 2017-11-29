@@ -45,9 +45,13 @@ func NewMgoStore() server.Storager {
 // CreateOccurrence adds the specified occurrence to the mem store
 func (m *mgoStore) CreateOccurrence(o *swagger.Occurrence) *errors.AppError {
 	//m.occurrences := m.session.DB("grafeas").C("occurrences")
-	err := m.occurrences.Find(bson.M{"name": o.Name})
-	if err != nil {
+	count, err := m.occurrences.Find(bson.M{"name": o.Name}).Count()
+	if count > 0 {
 		return &errors.AppError{Err: fmt.Sprintf("Occurrence with name %q already exists", o.Name),
+			StatusCode: http.StatusBadRequest}
+	}
+	if err != nil {
+		return &errors.AppError{Err: fmt.Sprintf("error searching for occurrence %q", o.Name),
 			StatusCode: http.StatusBadRequest}
 	}
 	m.occurrences.Insert(o)
